@@ -13,9 +13,9 @@ from cnd_lab.tailer import follow
 
 
 def collect(path: Path, parse_line: Callable[[str], Event | None],
-            poll_interval: float) -> None:
+            poll_interval: float, from_start: bool) -> None:
     """Read one log source and print each parsed event as one JSON line."""
-    for line in follow(path, poll_interval=poll_interval):
+    for line in follow(path, from_start=from_start, poll_interval=poll_interval):
         event = parse_line(line)
         if event is not None:
             print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
@@ -60,7 +60,7 @@ def main() -> None:
     workers = [
         threading.Thread(
             target=collect,
-            args=(path, parse_line, args.poll_interval),
+            args=(path, parse_line, args.poll_interval, args.from_start),
             daemon=True,
             name=f"follow-{path.name}",
         )
@@ -74,7 +74,7 @@ def main() -> None:
         for worker in workers:
             worker.join()
     except KeyboardInterrupt:
-        print("\nCollector stopped.", file=sys.stderr)
+        print("\\nCollector stopped.", file=sys.stderr)
 
 
 if __name__ == "__main__":
