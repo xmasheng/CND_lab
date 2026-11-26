@@ -4,16 +4,6 @@
 
 > 僅在自己擁有或明確獲准的系統上進行測試。攻擊演練只對自己的 lab 目標執行。
 
-## 我的環境
-
-- 主機：Windows 11
-- 虛擬化：VMware
-- Linux VM：Ubuntu，4 vCPU、4 GB RAM、30 GB 磁碟
-- 編輯方式：VS Code Remote SSH
-- 語言與版本控制：Python、Git、GitHub
-
-先以單台 Ubuntu VM 完成日誌收集與解析。這樣比較容易學習，也適合目前的資源；之後若要模擬攻防，再加入隔離網路中的 Kali VM。
-
 ## 學習路線
 
 | 階段 | 目標 | 預計成果 |
