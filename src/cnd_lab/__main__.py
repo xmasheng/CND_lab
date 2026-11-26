@@ -3,11 +3,22 @@
 import argparse
 import json
 import sys
-import time
+import threading
 from pathlib import Path
+from typing import Callable
 
+from cnd_lab.models import Event
 from cnd_lab.parsers import parse_auth_log, parse_nginx_access_log
 from cnd_lab.tailer import follow
+
+
+def collect(path: Path, parse_line: Callable[[str], Event | None],
+            poll_interval: float) -> None:
+    """Read one log source and print each parsed event as one JSON line."""
+    for line in follow(path, poll_interval=poll_interval):
+        event = parse_line(line)
+        if event is not None:
+            print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
 
 
 def main() -> None:
@@ -36,41 +47,32 @@ def main() -> None:
         (args.auth_log, parse_auth_log),
         (args.nginx_log, parse_nginx_access_log),
     ]
+    active = [(path, parse_line) for path, parse_line in streams if path.exists()]
 
-    # Check each source independently so a missing optional log does not prevent
-    # collecting from the other one.
-    active = []
-    for path, parse_line in streams:
-        if path.exists():
-            active.append((path, parse_line, follow(
-                path, from_start=args.from_start, poll_interval=args.poll_interval
-            )))
-        else:
-            print(f"Log file not found yet: {path}", file=sys.stderr)
+    for path, _ in streams:
+        if not path.exists():
+            print(f"Log file not found; skipping: {path}", file=sys.stderr)
 
     if not active:
         print("No log files found. Check the paths and try again.", file=sys.stderr)
         raise SystemExit(1)
 
+    workers = [
+        threading.Thread(
+            target=collect,
+            args=(path, parse_line, args.poll_interval),
+            daemon=True,
+            name=f"follow-{path.name}",
+        )
+        for path, parse_line in active
+    ]
+
     try:
-        while True:
-            found_line = False
-            for path, parse_line, lines in active:
-                # The generator yields a line when available; when idle it waits
-                # for a short poll interval. Alternate sources to keep both live.
-                try:
-                    line = next(lines)
-                    found_line = True
-                except StopIteration:
-                    continue
-
-                event = parse_line(line)
-                if event is None:
-                    continue
-                print(json.dumps(event.to_dict(), ensure_ascii=False), flush=True)
-
-            if not found_line:
-                time.sleep(args.poll_interval)
+        for worker in workers:
+            worker.start()
+        print("Following logs. Press Ctrl+C to stop.", file=sys.stderr)
+        for worker in workers:
+            worker.join()
     except KeyboardInterrupt:
         print("\nCollector stopped.", file=sys.stderr)
 
