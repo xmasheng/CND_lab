@@ -38,43 +38,83 @@
 
 ### 第 1 階段：日誌收集與解析
 
-- [ ] 建立 Python 專案骨架與執行方式
-- [ ] 解析 Ubuntu SSH 認證日誌
-- [ ] 解析 Nginx access log
-- [ ] 持續讀取新增日誌並輸出統一事件 JSON
-- [ ] 在自己的 Ubuntu VM 驗證檔案權限與實際輸出
+- [x] 建立 Python 專案骨架與執行方式
+- [x] 解析 Ubuntu SSH 認證日誌中的成功與失敗登入
+- [x] 解析 Nginx combined 格式 access log
+- [x] 持續讀取新增日誌並輸出統一事件 JSON
+- [ ] 在 Ubuntu VM 驗證安裝、檔案權限與實際輸出
 
-## 目錄規劃
+## 目錄
 
 ```text
 CND_lab/
 ├── README.md
+├── pyproject.toml
 ├── requirements.txt
-├── src/
-│   └── cnd_lab/
-│       ├── __init__.py
-│       ├── __main__.py
-│       ├── models.py
-│       ├── parsers.py
-│       └── tailer.py
-└── docs/
-    └── reports/
+└── src/
+    └── cnd_lab/
+        ├── __init__.py
+        ├── __main__.py
+        ├── models.py
+        ├── parsers.py
+        └── tailer.py
 ```
+
+## 第一次在 Ubuntu 執行
+
+先在 Ubuntu VM 安裝 Python 虛擬環境工具，並下載專案：
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv git
+git clone https://github.com/xmasheng/CND_lab.git
+cd CND_lab
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+啟動監控：
+
+```bash
+python -m cnd_lab
+```
+
+程式預設監控 `/var/log/auth.log` 和 `/var/log/nginx/access.log`，從啟動後新增的行開始讀取。每筆解析成功的事件會輸出一行 JSON；按 `Ctrl+C` 停止。若只想先讀取現有內容再繼續監控：
+
+```bash
+python -m cnd_lab --from-start
+```
+
+如果 Nginx 尚未安裝或尚未建立 access log，程式會略過該檔案並繼續監控存在的日誌。也可以用 `--auth-log` 和 `--nginx-log` 指定自己的日誌路徑。
+
+## 日誌讀取權限
+
+不要用 `sudo python -m cnd_lab` 執行整個程式。Ubuntu 通常用 `adm` 群組管理系統日誌讀取權限。先查看權限：
+
+```bash
+ls -l /var/log/auth.log /var/log/nginx/access.log
+```
+
+若檔案群組是 `adm`，可將自己的帳號加入該群組，再登出 Ubuntu 並重新登入：
+
+```bash
+sudo usermod -aG adm "$USER"
+```
+
+重新登入後再執行程式。只在確認日誌檔案的群組及權限後才套用這個方式；若 Nginx 日誌不屬於 `adm`，應只調整該日誌的讀取權限，不要開放成所有使用者可讀。
 
 ## 開發原則
 
 - 每次只增加一小段功能，先看懂再繼續。
-- 第一階段先使用 Python 標準函式庫，減少安裝負擔。
+- 第一階段使用 Python 標準函式庫，沒有額外執行期套件。
 - 程式以一般使用者權限執行；只授予讀取日誌所需的權限，不要用 root 執行整個程式。
 - 先記錄與告警；封鎖 IP 等會影響系統的動作，必須經過明確確認。
 - 演練只對隔離環境中自己控制的目標進行，並記錄測試時間與結果。
 
-## 第一階段預計使用方式
+## 第一階段目前的限制
 
-完成後，在 Ubuntu VM 以專案目錄執行：
-
-```bash
-python3 -m cnd_lab --auth-log /var/log/auth.log --nginx-log /var/log/nginx/access.log
-```
-
-程式會從啟動後新增的日誌行開始讀取，將成功解析的事件逐行輸出為 JSON。若 Ubuntu 日誌檔案無法讀取，請依 README 後續說明，為執行帳號設定最小必要的讀取權限。
+- SSH 解析支援 Ubuntu 常見的 `sshd` 成功與失敗登入訊息。
+- Nginx 解析器預期使用常見的 combined access log 格式。
+- 事件輸出到終端機；下一步再加入保存至檔案與在你的 VM 上驗證。
+- 尚未涵蓋所有 Linux 發行版、客製化日誌格式或多行事件。
